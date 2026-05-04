@@ -10,11 +10,12 @@ Built for circuit designers who need to quickly inspect simulation results from 
 - **Multi-format input** — CSV, VCSV (Virtuoso), PSF ASCII, TSV, DAT
 - **CJK support** — Chinese / Japanese signal names render correctly in legends and labels
 - **Split / Merge subplots** — right-click any signal to split it into its own subplot (Virtuoso-style), or merge it back
+- **Delete signals** — right-click to remove individual signals from the view (Virtuoso-style)
 - **Editable labels** — double-click legend labels to rename; edit axis labels from the toolbar
 - **Zoom back / forward** — navigate through your zoom history with Back/Fwd buttons
 - **Cursor measurements** — click two points to see Δx, Δy, frequency
 - **Publication export** — PNG (300 dpi), PDF, SVG, EPS — ready for papers
-- **Style control** — font size, line width, bold, B&W line styles, grid toggle
+- **Style control** — font size, line width, bold, B&W line styles, grid toggle (zoom preserved on style changes)
 
 ## Install
 
@@ -111,7 +112,7 @@ vp                          # or Ctrl+O inside the app
 - **Checkbox**: show/hide signals
 - **Click label**: select signal for measurements
 - **Double-click label**: rename the signal
-- **Right-click**: split signal to own subplot, or merge into another
+- **Right-click**: split signal to own subplot, merge into another, or delete from view
 
 ### Keyboard shortcuts
 
