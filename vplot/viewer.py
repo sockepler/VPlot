@@ -550,6 +550,60 @@ class WaveformViewer(tk.Tk):
         self._assign_default_groups()
         self._replot()
 
+    def _delete_signal(self, name: str):
+        """Remove a signal from the view (Virtuoso-style delete)."""
+        if name in self.checked_signals:
+            self.checked_signals[name].set(False)
+        # remove from data so it doesn't show in the panel
+        if name in self.checked_signals:
+            del self.checked_signals[name]
+        if name in self._signal_group:
+            del self._signal_group[name]
+        if name in self.signal_color_map:
+            del self.signal_color_map[name]
+        if name in self.signal_style_map:
+            del self.signal_style_map[name]
+        if name in self._label_vars:
+            del self._label_vars[name]
+        # rebuild signal panel and replot
+        self._populate_signals_keep()
+        self._replot()
+
+    def _populate_signals_keep(self):
+        """Rebuild signal panel keeping only the signals still in checked_signals."""
+        for w in self._signal_inner.winfo_children():
+            w.destroy()
+        if not self.data:
+            return
+
+        by_group: dict[int, list[str]] = defaultdict(list)
+        for name in self.data.signals:
+            if name in self.checked_signals or name in self._signal_group:
+                by_group[self._signal_group.get(name, 0)].append(name)
+
+        ci = 0
+        for gid in sorted(by_group):
+            names = by_group[gid]
+            if not names:
+                continue
+            unit = self.data.signal_units.get(names[0], "")
+            header = f"── Subplot {gid+1}  [{unit}]" if unit else f"── Subplot {gid+1}"
+            ttk.Label(self._signal_inner, text=header,
+                      style="PanelDim.TLabel").pack(
+                fill=tk.X, pady=(8, 2), padx=6)
+            for name in names:
+                if name not in self._signal_group:
+                    continue
+                color = self.signal_color_map.get(
+                    name, SIGNAL_COLORS[ci % len(SIGNAL_COLORS)])
+                self._make_signal_row(name, color)
+                ci += 1
+
+        ttk.Label(self._signal_inner,
+                  text="  ✎ Double-click label to edit\n  ⊞ Right-click to split/merge",
+                  style="PanelDim.TLabel",
+                  font=("Segoe UI", 8, "italic")).pack(pady=(6, 2), padx=6)
+
     # ── Axis label vars ────────────────────────────────────────────
     def _init_axis_label_vars(self):
         if not self.data: return
@@ -628,8 +682,11 @@ class WaveformViewer(tk.Tk):
         frame = ttk.Frame(self._signal_inner, style="Panel.TFrame")
         frame.pack(fill=tk.X, padx=6, pady=2)
 
-        var = tk.BooleanVar(value=True)
-        self.checked_signals[name] = var
+        if name in self.checked_signals:
+            var = self.checked_signals[name]
+        else:
+            var = tk.BooleanVar(value=True)
+            self.checked_signals[name] = var
         ttk.Checkbutton(frame, variable=var, command=self._replot,
                         style="TCheckbutton").pack(side=tk.LEFT)
 
@@ -638,9 +695,12 @@ class WaveformViewer(tk.Tk):
         swatch.pack(side=tk.LEFT, padx=(2,5))
         swatch.create_line(1, 7, 21, 7, fill=color, width=2)
 
-        display = self.data.signal_labels.get(name, name) if self.data else name
-        sv = tk.StringVar(value=display)
-        self._label_vars[name] = sv
+        if name in self._label_vars:
+            sv = self._label_vars[name]
+        else:
+            display = self.data.signal_labels.get(name, name) if self.data else name
+            sv = tk.StringVar(value=display)
+            self._label_vars[name] = sv
 
         lbl = tk.Label(frame, textvariable=sv, fg=color, bg=THEME["bg2"],
                        font=("Consolas",9), cursor="hand2", anchor="w")
@@ -705,6 +765,9 @@ class WaveformViewer(tk.Tk):
                 command=lambda g=gid: self._merge_signal(name, g))
 
         menu.add_separator()
+        menu.add_command(label="✕  Delete this signal",
+                         command=lambda: self._delete_signal(name))
+        menu.add_separator()
         menu.add_command(label="↺  Reset all subplots",
                          command=self._reset_groups)
         try:
@@ -727,6 +790,16 @@ class WaveformViewer(tk.Tk):
     # ── Plotting ───────────────────────────────────────────────────
     def _replot(self):
         if not self.data: return
+
+        # ── Save current view limits so style changes don't reset zoom ──
+        _saved_xlim = self.axes[0].get_xlim() if self.axes else None
+        _saved_ylims: dict[int, tuple] = {}
+        if self.axes:
+            old_active = self._active_groups()
+            for i, gid in enumerate(old_active):
+                if i < len(self.axes):
+                    _saved_ylims[gid] = self.axes[i].get_ylim()
+
         self.fig.clear()
         self.axes.clear()
         self.cursor_markers.clear()
@@ -818,6 +891,17 @@ class WaveformViewer(tk.Tk):
             self._xlabel_var.set(xlabel)
             self.axes[-1].set_xlabel(xlabel, fontsize=fsize, fontweight=fwt,
                                      color="#222222", labelpad=6)
+
+        # ── Restore saved view limits ──
+        if _saved_xlim and self.axes:
+            self._range_updating = True
+            for ax in self.axes:
+                ax.set_xlim(_saved_xlim)
+            new_active = self._active_groups()
+            for i, gid in enumerate(new_active):
+                if gid in _saved_ylims and i < len(self.axes):
+                    self.axes[i].set_ylim(_saved_ylims[gid])
+            self._range_updating = False
 
         # connect xlim_changed to update range toolbar
         if self.axes:
