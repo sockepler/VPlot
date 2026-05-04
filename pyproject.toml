@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vplot"
+version = "1.0.0"
+description = "Analog circuit waveform viewer with IEEE-style SI-prefix formatting"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "pandas",
+    "matplotlib",
+]
+
+[project.scripts]
+vp = "vplot.viewer:main"
+
+[project.gui-scripts]
+vplot = "vplot.viewer:main"
+
+[tool.setuptools.packages.find]
+include = ["vplot*"]
