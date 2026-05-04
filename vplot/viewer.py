@@ -150,6 +150,8 @@ class WaveformViewer(tk.Tk):
         # axis label overrides
         self._xlabel_var  = tk.StringVar(value="time [s]")
         self._ylabel_vars: dict[int, tk.StringVar] = {}   # gid → label
+        self._xlabel_manual = False          # user has manually edited X label
+        self._ylabel_manual: dict[int, bool] = {}  # gid → user edited Y label
 
         # range toolbar vars
         self._xmin_var = tk.StringVar()
@@ -318,8 +320,8 @@ class WaveformViewer(tk.Tk):
             side=tk.LEFT, padx=(8,2), pady=3)
         self._xlabel_entry = _entry(rt, self._xlabel_var, w=14)
         self._xlabel_entry.pack(side=tk.LEFT, padx=2, pady=3)
-        self._xlabel_entry.bind("<Return>",   lambda e: self._replot())
-        self._xlabel_entry.bind("<FocusOut>", lambda e: self._replot())
+        self._xlabel_entry.bind("<Return>",   lambda e: self._apply_xlabel())
+        self._xlabel_entry.bind("<FocusOut>", lambda e: self._apply_xlabel())
 
         ttk.Separator(rt, orient=tk.VERTICAL).pack(
             side=tk.LEFT, fill=tk.Y, padx=6, pady=4)
@@ -607,6 +609,9 @@ class WaveformViewer(tk.Tk):
     # ── Axis label vars ────────────────────────────────────────────
     def _init_axis_label_vars(self):
         if not self.data: return
+        # Reset manual-edit flags on new file load
+        self._xlabel_manual = False
+        self._ylabel_manual = {}
         # X label
         xu = self.data.x_unit
         xl = self.data.x_label
@@ -624,6 +629,11 @@ class WaveformViewer(tk.Tk):
         if 0 in self._ylabel_vars:
             self._ylabel_active_var.set(self._ylabel_vars[0].get())
 
+    def _apply_xlabel(self):
+        """Apply user-edited X label and mark it as manually set."""
+        self._xlabel_manual = True
+        self._replot()
+
     def _apply_ylabel(self):
         """Write the active Y label entry back to the active subplot's var."""
         if not self.axes or self._active_ax_idx >= len(self.axes): return
@@ -634,6 +644,7 @@ class WaveformViewer(tk.Tk):
             gid = active_groups[self._active_ax_idx]
             if gid in self._ylabel_vars:
                 self._ylabel_vars[gid].set(new_lbl)
+            self._ylabel_manual[gid] = True
         self._replot()
 
     def _active_groups(self) -> list[int]:
@@ -884,11 +895,13 @@ class WaveformViewer(tk.Tk):
         if self.axes:
             xmin, xmax = self.axes[0].get_xlim()
             x_scale, x_prefix = _best_si(xmin, xmax)
-            x_fmt = SIAxisFormatter(x_scale)
             for ax in self.axes:
                 ax.xaxis.set_major_formatter(SIAxisFormatter(x_scale))
-            xlabel = f"{self.data.x_label} [{x_prefix}{self.data.x_unit}]"
-            self._xlabel_var.set(xlabel)
+            if self._xlabel_manual:
+                xlabel = self._xlabel_var.get()
+            else:
+                xlabel = f"{self.data.x_label} [{x_prefix}{self.data.x_unit}]"
+                self._xlabel_var.set(xlabel)
             self.axes[-1].set_xlabel(xlabel, fontsize=fsize, fontweight=fwt,
                                      color="#222222", labelpad=6)
 
@@ -962,8 +975,11 @@ class WaveformViewer(tk.Tk):
         scale, prefix = _best_si(xmin, xmax)
         for ax in self.axes:
             ax.xaxis.set_major_formatter(SIAxisFormatter(scale))
-        xlabel = f"{self.data.x_label} [{prefix}{self.data.x_unit}]"
-        self._xlabel_var.set(xlabel)
+        if self._xlabel_manual:
+            xlabel = self._xlabel_var.get()
+        else:
+            xlabel = f"{self.data.x_label} [{prefix}{self.data.x_unit}]"
+            self._xlabel_var.set(xlabel)
         fsize = self._font_size.get()
         fwt = "bold" if self._font_bold.get() else "normal"
         self.axes[-1].set_xlabel(xlabel, fontsize=fsize, fontweight=fwt,
@@ -980,10 +996,13 @@ class WaveformViewer(tk.Tk):
         active_gids = self._active_groups()
         if ax_idx < len(active_gids):
             gid = active_gids[ax_idx]
-            base_unit = self._y_base_units.get(gid, "")
-            ylabel = f"[{prefix}{base_unit}]" if base_unit else "Value"
-            if gid in self._ylabel_vars:
-                self._ylabel_vars[gid].set(ylabel)
+            if self._ylabel_manual.get(gid, False):
+                ylabel = self._ylabel_vars[gid].get() if gid in self._ylabel_vars else "Value"
+            else:
+                base_unit = self._y_base_units.get(gid, "")
+                ylabel = f"[{prefix}{base_unit}]" if base_unit else "Value"
+                if gid in self._ylabel_vars:
+                    self._ylabel_vars[gid].set(ylabel)
             fsize = self._font_size.get()
             fwt = "bold" if self._font_bold.get() else "normal"
             ax.set_ylabel(ylabel, fontsize=fsize, fontweight=fwt,
